@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue/flutter_blue.dart';
@@ -55,26 +57,51 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
   String text = "";
+  List<String> deviceData = new List<String>();
+  List<String> deviceData2 = new List<String>();
+  Map<String, int> deviceMap = new Map();
   FlutterBlue flutterBlue = FlutterBlue.instance;
 
   _MyHomePageState() {
-      flutterBlue.scan().listen((scanResult) async {
-      var servicedata = scanResult.advertisementData.serviceData;
-      if(servicedata.length > 0) {
-      var data = servicedata.entries.toList().elementAt(0).value;
-      if(data.isNotEmpty && (data.elementAt(0) & 0x0F == 0x02)) {
-      debugPrint(data.toString());
-      var temp = "";
-      await data.sublist(1,9).forEach((f) async {temp += f.toRadixString(16);});
-      temp += ", ";
-      temp += scanResult.rssi.toString();
-      setState(() {
-        text = temp;
-        //
-      });
-      }
+      flutterBlue.scan().listen(this.bluetoothscan);
+
+
+      var duration = Duration(seconds: 8);
+      Timer.periodic(duration, this.timeoutchecker);
+
+  }
+
+  void timeoutchecker(Timer timer) {
+
+    deviceMap.forEach((id, index) async {
+      if(deviceData2.length <= index) return;
+      if(deviceData[index].compareTo(deviceData2[index]) == 0) {
+        deviceData[index] = "Timeout";
       }
     });
+
+    deviceData2 = new List.from(deviceData);
+  }
+
+  void bluetoothscan(scanResult) async {
+    var servicedata = scanResult.advertisementData.serviceData;
+    if(servicedata.length > 0) {
+      var data = servicedata.entries.toList().elementAt(0).value;
+      if(data.isNotEmpty && (data.elementAt(0) & 0x0F == 0x02)) {
+        debugPrint(data.toString());
+        var id = "";
+        await data.sublist(1,9).forEach((f) async {id += f.toRadixString(16);});
+
+        if(!deviceMap.containsKey(id)) {
+          deviceMap[id] = deviceData.length;
+          deviceData.add("");
+        }
+        var dindex = deviceMap[id];
+        setState(() {
+          deviceData[dindex] = id + " " + scanResult.rssi.toString() + " " + new DateTime.now().millisecondsSinceEpoch.toString();
+        });
+      }
+    }
   }
 
   void _incrementCounter() {
@@ -103,41 +130,33 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              text,
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.display1,
-            ),
-          ],
-        ),
+      body: ListView.builder(
+        itemBuilder: (BuildContext context, int index) =>
+            DeviceWidget(deviceData[index]),
+        itemCount: deviceData.length,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        onPressed: () {deviceData.clear(); deviceMap.clear();},
         child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
+}
+
+
+class DeviceWidget extends StatelessWidget {
+
+  String text;
+
+  DeviceWidget(String t) {
+    text = t;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO: implement build
+    return Text(text);
+  }
+
+
 }
