@@ -1,8 +1,12 @@
 import 'dart:async';
-
+import 'dart:math';
+import 'dart:convert';
+import 'dart:core';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue/flutter_blue.dart';
+import 'package:http/http.dart' as http;
+
 
 void main() => runApp(MyApp());
 
@@ -57,17 +61,21 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
   String text = "";
+  Map<String, int> beacons = new Map();
+
+
+
   List<String> deviceData = new List<String>();
   List<String> deviceData2 = new List<String>();
   Map<String, int> deviceMap = new Map();
   FlutterBlue flutterBlue = FlutterBlue.instance;
 
   _MyHomePageState() {
-      flutterBlue.scan().listen(this.bluetoothscan);
+    flutterBlue.scan().listen(this.bluetoothscan);
 
 
-      var duration = Duration(seconds: 8);
-      Timer.periodic(duration, this.timeoutchecker);
+    var duration = Duration(seconds: 10);
+    Timer.periodic(duration, this.timeoutchecker);
 
   }
 
@@ -83,6 +91,13 @@ class _MyHomePageState extends State<MyHomePage> {
     deviceData2 = new List.from(deviceData);
   }
 
+  double distance(int rssi, int p){
+    double dist = 0.0;
+    dist = pow(10, ((p-rssi)/20));
+    return dist;
+  }
+
+
   void bluetoothscan(scanResult) async {
     var servicedata = scanResult.advertisementData.serviceData;
     if(servicedata.length > 0) {
@@ -90,7 +105,9 @@ class _MyHomePageState extends State<MyHomePage> {
       if(data.isNotEmpty && (data.elementAt(0) & 0x0F == 0x02)) {
         debugPrint(data.toString());
         var id = "";
-        await data.sublist(1,9).forEach((f) async {id += f.toRadixString(16);});
+        double dist = 0.0;
+
+        data.sublist(1,9).forEach((int f) {id += f.toRadixString(16).padLeft(2, "0");});
 
         if(!deviceMap.containsKey(id)) {
           deviceMap[id] = deviceData.length;
@@ -98,22 +115,43 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         var dindex = deviceMap[id];
         setState(() {
-          deviceData[dindex] = id + " " + scanResult.rssi.toString() + " " + new DateTime.now().millisecondsSinceEpoch.toString();
+
+          if(!beacons.containsKey(id))
+          {
+
+            String beaconGet ="http://omaraa.ddns.net:62027/beacons/" + id;
+            debugPrint(beaconGet);
+            final response = http.get(
+              beaconGet,
+              headers: {"Accept": "application/json"},
+            );
+
+            response.then((res) {
+              Map<String, dynamic> result = jsonDecode(res.body);
+              if (res.statusCode == 200) {
+                int offs = int.parse(result['shovid']);
+                debugPrint(offs.toString());
+                beacons[id] = offs;
+                debugPrint(beacons.length.toString());
+              }
+            });
+
+          }
+
+          else {
+            dist = distance(scanResult.rssi, beacons[id]);
+            debugPrint("Distance is: " + dist.toString());
+            deviceData[dindex] =
+                id + " " + scanResult.rssi.toString() + " " +
+                    new DateTime.now().millisecondsSinceEpoch.toString() + " " +
+                    dist.toString();
+          }
         });
       }
     }
   }
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+
 
   @override
   Widget build(BuildContext context) {
