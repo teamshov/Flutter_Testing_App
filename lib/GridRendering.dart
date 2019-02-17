@@ -1,8 +1,10 @@
 
 import 'dart:core';
 import 'dart:ui';
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' as mat;
+import 'package:flutter/services.dart';
 import 'package:spritewidget/spritewidget.dart';
 import './Cell.dart';
 
@@ -34,6 +36,79 @@ class Cell extends NodeWithSize {
 
 }
 
+class PointerPos {
+  Offset originbox;
+}
+
+class Root extends NodeWithSize {
+  Grid g;
+  Sprite st;
+  Image img;
+  Root() : super(Size(100,100)) {
+
+    g = new Grid(1, Size(31, 40));
+
+
+    loadImages();
+
+    addChild(g);
+
+
+    g.setColor(0, 0, Color.fromARGB(100, 0, 255, 0));
+    this.userInteractionEnabled = true;
+    handleMultiplePointers = true;
+  }
+
+  void loadImages() async {
+      ImageMap images = new ImageMap(NetworkAssetBundle(new Uri.http("omaraa.ddns.net:62027", "")));
+      img = await images.loadImage("/db/buildings/eb2/floor1.png");
+      st = new Sprite.fromImage(img);
+      addChild(st);
+  }
+
+  Offset originpos;
+  double originscale;
+  double origindist;
+  Offset originbox1;
+  Offset originbox2;
+  bool down = false;
+  bool multi = true;
+  int dpid = -1;
+  int zpid = -1;
+
+  Map<int, Offset> pointers = new Map();
+  @override handleEvent(SpriteBoxEvent event) {
+    super.handleEvent(event);
+    var local = event.boxPosition;
+    if(event.type == mat.PointerDownEvent) {
+      pointers[event.pointer] = event.boxPosition;
+      if(dpid == -1) {
+        dpid = event.pointer;
+        originpos = g.position;
+      }
+      else if(zpid == -1) {
+        zpid = event.pointer;
+        originscale = g.scale;
+        origindist = (local - pointers[dpid]).distance;
+      }
+    }
+    else if(event.type == mat.PointerMoveEvent && dpid==event.pointer) {
+      g.position = (originpos+(local-pointers[event.pointer])/10);
+    }
+    else if(event.type == mat.PointerMoveEvent && zpid==event.pointer) {
+      var dist = (local - pointers[dpid]).distance;
+      g.scale = originscale+(dist-origindist)/100;
+    }
+    else if(event.type == mat.PointerUpEvent) {
+      if(event.pointer == zpid)
+        zpid = -1;
+      if(event.pointer == dpid)
+        dpid = -1;
+    }
+    return true;
+  }
+}
+
 class Grid extends NodeWithSize {
   int cellSize;
   int widthincells;
@@ -44,6 +119,7 @@ class Grid extends NodeWithSize {
 
   List<Cell> cells;
   Grid(this.cellSize, Size s) : super(s) {
+
     widthincells = (size.width/cellSize).toInt();
     heightincells = (size.height/cellSize).toInt();
     var numberofcells = widthincells*heightincells;
@@ -86,4 +162,5 @@ class Grid extends NodeWithSize {
   update(double dt) {
     super.update(dt);
   }
+
 }
